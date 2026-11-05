@@ -18,6 +18,7 @@
 | [.agents/skills](.agents/skills) | 五个迁移后的技能，覆盖检索、案例管理、拆解与方案、生产、复盘 |
 | [docs/runtimes.md](docs/runtimes.md) | Grokbot、WorkBuddy、Codex 及通用环境接入 |
 | [docs/dependencies.md](docs/dependencies.md) | WorkBuddy 原技能、内置能力、外部服务与付费依赖的迁移清单 |
+| [docs/scrapecreators.md](docs/scrapecreators.md) | TikTok、YouTube、Facebook 等海外平台的技能安装、额度授权及使用示例 |
 | [docs/feishu.md](docs/feishu.md) | 新租户 CLI 授权、自动建表建文档、读写与恢复 |
 | [templates](templates) | 案例、拆解和版本化内容方案模板 |
 | [scripts](scripts) | 本地项目检查及飞书初始化工具 |
