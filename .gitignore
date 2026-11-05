@@ -1,0 +1,8 @@
+# Each deployment lives outside the Git template's tracked files.
+.project/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.DS_Store

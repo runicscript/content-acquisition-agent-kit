@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "base_name": "内容获客运营",
+  "tables": {
+    "showcases": {
+      "name": "Showcase",
+      "fields": [
+        {"name": "案例", "type": "text", "style": {"type": "url"}},
+        {"name": "拆解", "type": "text", "style": {"type": "url"}},
+        {"name": "内容方案", "type": "text", "style": {"type": "url"}},
+        {"name": "有效评级", "type": "select", "options": [{"name": "待定"}, {"name": "高"}, {"name": "中"}, {"name": "低"}]}
+      ]
+    },
+    "candidates": {
+      "name": "候选池",
+      "fields": [
+        {"name": "候选编号", "type": "text"},
+        {"name": "推广线 ID", "type": "text"},
+        {"name": "产品", "type": "text"},
+        {"name": "平台", "type": "text"},
+        {"name": "对象类型", "type": "select", "options": [{"name": "账号"}, {"name": "作品"}]},
+        {"name": "平台对象 ID 或稳定定位", "type": "text"},
+        {"name": "原链接", "type": "text", "style": {"type": "url"}},
+        {"name": "作者", "type": "text"},
+        {"name": "标题", "type": "text"},
+        {"name": "对标类型", "type": "text"},
+        {"name": "流量证据与基准", "type": "text"},
+        {"name": "获客证据", "type": "text"},
+        {"name": "推荐与核验缺口", "type": "text"},
+        {"name": "发现日期", "type": "datetime"},
+        {"name": "最近核验日期", "type": "datetime"},
+        {"name": "人工决定", "type": "select", "options": [{"name": "待挑选"}, {"name": "拆账号"}, {"name": "拆这条内容"}, {"name": "观察"}, {"name": "略过"}]},
+        {"name": "人工备注", "type": "text"}
+      ]
+    }
+  },
+  "documents": {
+    "brief": {"title": "产品与推广线说明"},
+    "case_template": {"title": "案例文档模板", "template": "templates/case.md"},
+    "breakdown_template": {"title": "案例拆解模板", "template": "templates/breakdown.md"},
+    "plan_template": {"title": "内容方案模板", "template": "templates/content-plan.md"}
+  }
+}
