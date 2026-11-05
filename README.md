@@ -1,21 +1,23 @@
 # 自媒体获客运营 Agent 启动包
 
-给 Agent 一个新产品或服务的资料和这个仓库，它可以沿同一套流程配置项目，初始化新的飞书文档和多维表格，然后开始搜对标、拆案例、做内容和复盘。每个项目单独准备飞书租户、应用授权及所需第三方能力。Grokbot、WorkBuddy、Codex 或其他 Agent 共用 [AGENTS.md](AGENTS.md) 和五个业务技能。
+给 Agent 新产品或服务、目标用户资料和这个仓库，它可以沿同一套流程配置项目，初始化新的飞书文档和多维表格，然后开始搜对标、拆案例、做内容、主动触达和复盘。每个项目单独准备飞书租户、应用授权及所需第三方能力。Grokbot、WorkBuddy、Codex 或其他 Agent 共用 [AGENTS.md](AGENTS.md) 和六个业务技能。
 
 ## 新项目怎么用
 
 给 Agent 仓库读取权限，并在一个新项目目录打开或检出仓库。需要单独托管项目时，在 GitHub 使用 **Use this template** 创建项目仓库。把下面这段与产品资料一起发给它。
 
-> 读取本仓库的 AGENTS.md，给我初始化自媒体获客运营 Agent。先问我要推广什么产品，再配置检索 Skill 和 LibTV，主动发起需要我完成的安全授权。接着请我完成新租户的飞书 CLI 授权，验证通过后再问我要工作的 Wiki 页面链接。收到链接后，在该 Wiki 下建项目文档、候选池和 Showcase 表，回读后汇报。
+> 读取本仓库的 AGENTS.md，给我初始化自媒体获客运营 Agent。先主动索要产品或服务资料以及目标用户画像，再配置检索 Skill 和 LibTV，主动发起需要我完成的安全授权。接着请我完成新租户的飞书 CLI 授权，验证通过后再问我要工作的 Wiki 页面链接。收到链接后，在该 Wiki 下建项目文档、候选池和 Showcase 表，回读后汇报。
 
 能直接运行初始化的 Agent 需要 Git 或仓库读取权限、终端、Python 3.10+、独立可写目录，以及对已授权服务的访问能力。私有仓库需让运行环境获得读取权限。产品简报和运行记录放在当前项目的 `.project/`。浏览器登录、组织管理员审批和凭据注入按目标租户及工具要求完成。
+
+内容检索和主动触达共用产品与用户画像。需要找人时，可对 Agent 说「用 `engage-target-users` 找目标用户正在讨论这个问题的博主评论区或公开帖子，交原帖证据和评论草稿给我选」。Agent 逐条读语境，按已批准的账号、目标和文本发布，并记录有效回复及后续线索。 [主动触达 Skill](.agents/skills/engage-target-users/SKILL.md)
 
 ## 仓库里有什么
 
 | 路径 | 内容 |
 |---|---|
 | [AGENTS.md](AGENTS.md) | 新项目接手、补齐输入、开通验证、阶段路由 |
-| [.agents/skills](.agents/skills) | 五个迁移后的技能，覆盖检索、案例管理、拆解与方案、生产、复盘 |
+| [.agents/skills](.agents/skills) | 六个业务技能，覆盖检索、案例管理、拆解与方案、生产、主动触达、复盘 |
 | [docs/runtimes.md](docs/runtimes.md) | Grokbot、WorkBuddy、Codex 及通用环境接入 |
 | [docs/dependencies.md](docs/dependencies.md) | WorkBuddy 原技能、内置能力、外部服务与付费依赖的迁移清单 |
 | [docs/scrapecreators.md](docs/scrapecreators.md) | TikTok、YouTube、Facebook 等海外平台的技能安装、额度授权及使用示例 |

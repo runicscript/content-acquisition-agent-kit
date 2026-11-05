@@ -51,8 +51,22 @@ class ProjectSetupTests(unittest.TestCase):
                     }])
         config.write_text(json.dumps(data))
         report = json.loads(self.run_setup("doctor").stdout)
+        self.assertFalse(report["brief_ready"])
+        self.assertIn("promotion_lines[0].audience_profile.trigger", report["missing"])
+
+        profile = {"trigger": "客户催确认订单", "signals": ["公开询问如何核对订单"],
+                   "exclusions": ["同行只是在发布广告"], "status": "hypothesis"}
+        data["promotion_lines"][0]["audience_profile"] = profile
+        config.write_text(json.dumps(data))
+        report = json.loads(self.run_setup("doctor").stdout)
         self.assertTrue(report["brief_ready"])
         self.assertFalse(report["remote_verified"])
+
+        profile["signals"] = [" "]
+        config.write_text(json.dumps(data))
+        report = json.loads(self.run_setup("doctor").stdout)
+        self.assertIn("promotion_lines[0].audience_profile.signals", report["missing"])
+        profile["signals"] = ["公开询问如何核对订单"]
 
         data["promotion_lines"].append(dict(data["promotion_lines"][0], audience="团队"))
         config.write_text(json.dumps(data))

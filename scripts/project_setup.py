@@ -53,6 +53,20 @@ def filled_text(value):
     return isinstance(value, str) and bool(value.strip())
 
 
+def missing_audience_fields(value):
+    profile = value if isinstance(value, dict) else {}
+    missing = []
+    if not filled_text(profile.get("trigger")):
+        missing.append("trigger")
+    for key in ("signals", "exclusions"):
+        entries = profile.get(key)
+        if not isinstance(entries, list) or not entries or not all(map(filled_text, entries)):
+            missing.append(key)
+    if profile.get("status") not in ("hypothesis", "confirmed"):
+        missing.append("status")
+    return missing
+
+
 def inspect_brief(data):
     if data.get("schema_version") != 1:
         raise ValueError("不支持该项目配置版本。")
@@ -76,6 +90,10 @@ def inspect_brief(data):
             for key in LINE_FIELDS:
                 if not filled_text(line.get(key)):
                     missing.append(f"promotion_lines[{index}].{key}")
+            missing.extend(
+                f"promotion_lines[{index}].audience_profile.{key}"
+                for key in missing_audience_fields(line.get("audience_profile"))
+            )
             line_id = line.get("id")
             if filled_text(line_id):
                 if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", line_id) or line_id in line_ids:
