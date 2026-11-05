@@ -6,5 +6,5 @@
   "platforms": [],
   "promotion_lines": [],
   "research": {"languages": [], "regions": [], "lookback_days": null},
-  "workflow": {"storage": "feishu", "video": false, "recurring": false}
+  "workflow": {"storage": "feishu", "video": true, "recurring": false}
 }

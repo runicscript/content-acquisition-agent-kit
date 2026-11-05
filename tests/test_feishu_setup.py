@@ -16,6 +16,7 @@ class FakeLark:
         self.profile = "acq-demo"
         self.schema = schema
         self.root = []
+        self.nodes = {"wikiTarget": [], "wikiProject": []}
         self.children = []
         self.tables = {}
         self.writes = []
@@ -32,6 +33,9 @@ class FakeLark:
     def files(self, parent=""):
         return copy.deepcopy(self.children if parent else self.root)
 
+    def wiki_rows(self, target, parent):
+        return copy.deepcopy(self.nodes[parent])
+
     def base_rows(self, shortcut, key, *args):
         if shortcut == "+table-list":
             return [{"id": table_id, "name": table["name"]} for table_id, table in self.tables.items()]
@@ -45,6 +49,21 @@ class FakeLark:
 
     def call(self, service, command, *args, content=None):
         flags = dict(zip(args[::2], args[1::2]))
+        if command == "+node-get":
+            return {"space_id": "12345", "node_token": flags["--node-token"]}
+        if command == "+node-list":
+            return {"nodes": copy.deepcopy(self.nodes[flags["--parent-node-token"]]),
+                    "has_more": False}
+        if command == "+node-create":
+            self.writes.append(command)
+            kind = flags["--obj-type"]
+            node = {"node_token": "wikiProject" if kind == "docx" else "wikiBase",
+                    "obj_token": "fixtureLanding" if kind == "docx" else "fixtureBase",
+                    "obj_type": kind, "node_type": "origin", "title": flags["--title"]}
+            self.nodes[flags["--parent-node-token"]].append(node)
+            if kind == "bitable":
+                self.add_table("默认表", [])
+            return node
         if command == "+fetch":
             return {"document": {"document_id": flags["--doc"], "content": "fixture"}}
         self.writes.append(command)
@@ -59,7 +78,14 @@ class FakeLark:
             return {"table": self.add_table(flags["--name"], json.loads(flags["--fields"]))}
         if service == "docs" and command == "+create":
             doc_id = f"fixtureDoc{len(self.children)}"
-            self.children.append({"name": flags["--title"], "type": "docx", "token": doc_id})
+            parent = flags["--parent-token"]
+            if parent == "wikiProject":
+                doc_id = f"fixtureDoc{len(self.nodes[parent])}"
+                self.nodes[parent].append({"title": flags["--title"], "obj_type": "docx",
+                                           "obj_token": doc_id, "node_token": "wiki" + doc_id,
+                                           "node_type": "origin"})
+            else:
+                self.children.append({"name": flags["--title"], "type": "docx", "token": doc_id})
             if self.timeout_after_create == flags["--title"]:
                 raise setup.SetupError("timeout")
             return {"document": {"document_id": doc_id}}
@@ -91,7 +117,7 @@ class FeishuSetupTests(unittest.TestCase):
         params = dict(
             project="demo", project_name="Demo", brief=None, timezone=None, brand="feishu",
             app_id="cli_fixture", tenant_key="target_tenant", apply=True, verify=False,
-            identity=False, lark=None, retry_pending=False,
+            identity=False, lark=None, retry_pending=False, drive=True, wiki_parent=None,
         )
         params.update(overrides)
         with patch.object(setup, "Lark", return_value=self.fake), redirect_stdout(io.StringIO()):
@@ -112,6 +138,40 @@ class FeishuSetupTests(unittest.TestCase):
         self.run_setup(apply=False, verify=True)
         self.assertEqual(self.fake.writes, writes)
         self.assertEqual(self.state.read_bytes(), state)
+
+    def test_fresh_apply_requires_an_explicit_destination(self):
+        with self.assertRaisesRegex(setup.SetupError, "Wiki"):
+            self.run_setup(drive=False)
+        self.assertFalse(self.state.exists())
+        self.assertEqual(self.fake.writes, [])
+
+    def test_wiki_provisions_in_place_then_reuses_saved_parent(self):
+        self.run_setup(drive=False, wiki_parent="https://team.feishu.cn/wiki/wikiTarget")
+        state = setup.read_json(self.state)
+        self.assertEqual(state["wiki"], {"space_id": "12345", "node_token": "wikiTarget"})
+        self.assertNotIn("+create-folder", self.fake.writes)
+        self.assertNotIn("+base-create", self.fake.writes)
+        self.assertEqual({v["name"] for v in self.fake.tables.values()},
+                         {"默认表", "Showcase", "候选池"})
+        writes = list(self.fake.writes)
+        self.run_setup(drive=False)
+        self.run_setup(drive=False, apply=False, verify=True)
+        self.assertEqual(self.fake.writes, writes)
+        with self.assertRaisesRegex(setup.SetupError, "Wiki"):
+            self.run_setup(drive=False, wiki_parent="wikiOther")
+        self.fake.nodes["wikiProject"] = [
+            row for row in self.fake.nodes["wikiProject"] if row["obj_type"] != "bitable"
+        ]
+        with self.assertRaisesRegex(setup.SetupError, "回读"):
+            self.run_setup(drive=False, apply=False, verify=True)
+        self.assertEqual(self.fake.writes, writes)
+
+    def test_inaccessible_wiki_stops_before_creating_resources(self):
+        with patch.object(self.fake, "call", side_effect=setup.SetupError("permission denied")):
+            with self.assertRaisesRegex(setup.SetupError, "permission denied"):
+                self.run_setup(drive=False, wiki_parent="wikiTarget")
+        self.assertFalse(self.state.exists())
+        self.assertEqual(self.fake.writes, [])
 
     def test_tenant_and_user_mismatch_stop_before_write(self):
         self.fake.tenant = "wrong_tenant"

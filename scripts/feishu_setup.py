@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -176,6 +177,23 @@ class Lark:
                 raise SetupError("云空间分页异常。")
             seen_pages.add(page)
 
+    def wiki_rows(self, target, parent):
+        rows, page = [], ""
+        seen_pages = set()
+        while True:
+            args = ["wiki", "+node-list", "--space-id", target["space_id"],
+                    "--parent-node-token", parent]
+            if page:
+                args += ["--page-token", page]
+            data = self.call(*args)
+            rows.extend(items(data, "nodes"))
+            if not data.get("has_more"):
+                return rows
+            page = get_id(data, "page_token")
+            if page in seen_pages:
+                raise SetupError("Wiki 子节点分页异常。")
+            seen_pages.add(page)
+
     def base_rows(self, shortcut, key, *args):
         rows = []
         while True:
@@ -205,6 +223,36 @@ def matching(rows, title, kind=None):
     return exact[0] if exact else None
 
 
+def wiki_token(value):
+    if TOKEN.fullmatch(value):
+        return value
+    url = urlsplit(value)
+    match = re.fullmatch(r"/wiki/([A-Za-z0-9_-]+)/?", url.path)
+    if url.scheme != "https" or not url.hostname or url.username or not match:
+        raise SetupError("请提供目标 Wiki 的 HTTPS 页面链接或节点 ID。")
+    return match[1]
+
+
+def wiki_target(lark, token):
+    result = lark.call("wiki", "+node-get", "--node-token", token)
+    node = get_id(result, "node_token")
+    space = get_id(result, "space_id")
+    if node != token or not space.isdecimal():
+        raise SetupError("Wiki 父节点或空间回读不匹配。")
+    return {"space_id": space, "node_token": node}
+
+
+def wiki_match(lark, target, parent, title, kind):
+    rows = [
+        dict(row, name=row.get("title"), type=row.get("obj_type"))
+        for row in lark.wiki_rows(target, parent)
+    ]
+    row = matching(rows, title, kind)
+    if row and row.get("node_type") != "origin":
+        raise SetupError(f"Wiki 资源「{title}」不是实体节点。")
+    return row
+
+
 class Provision:
     def __init__(self, lark, path, state, apply, retry_pending):
         self.lark, self.path, self.state = lark, path, state
@@ -214,7 +262,8 @@ class Provision:
         saved = self.state["resources"].get(key)
         current = find()
         if saved is not None:
-            if current is None or get_id(current, *id_keys) != saved["id"]:
+            if (current is None or get_id(current, *id_keys) != saved["id"] or
+                    ("node_token" in saved and current.get("node_token") != saved["node_token"])):
                 raise SetupError(f"{key} 未通过回读校验。请核对项目资源映射。")
             return saved["id"]
         if not self.apply:
@@ -243,6 +292,8 @@ class Provision:
             if current is None or get_id(current, *id_keys) != created_id:
                 raise SetupError(f"{key} 尚未通过回读。可稍后重跑，脚本会先重新查询。")
         self.state["resources"][key] = {"id": get_id(current, *id_keys)}
+        if "node_token" in current:
+            self.state["resources"][key]["node_token"] = get_id(current, "node_token")
         if isinstance(current.get("url"), str) and current["url"].startswith("https://"):
             self.state["resources"][key]["url"] = current["url"]
         self.state.pop("pending", None)
@@ -274,29 +325,46 @@ class Provision:
     def run(self, schema, contents):
         lark = self.lark
         folder_name = self.state["folder_name"]
-        folder = self.ensure(
-            "folder", lambda: matching(lark.files(), folder_name, "folder"),
-            lambda: lark.call("drive", "+create-folder", "--name", folder_name),
-            ("folder_token", "token"),
-        )
         tables = schema["tables"]
         first_key = "showcases"
         first = tables[first_key]
         base_name = schema["base_name"]
-        base = self.ensure(
-            "base", lambda: matching(lark.files(folder), base_name, "bitable"),
-            lambda: lark.call("base", "+base-create", "--name", base_name,
-                              "--folder-token", folder, "--time-zone", self.state["timezone"],
-                              "--table-name", first["name"], "--fields",
-                              json.dumps(first["fields"], ensure_ascii=False)).get("base"),
-            ("base_token", "app_token", "token"),
-        )
+        wiki = self.state.get("wiki")
+        if wiki:
+            def create_node(parent, title, kind):
+                return lark.call("wiki", "+node-create", "--space-id", wiki["space_id"],
+                                 "--parent-node-token", parent, "--title", title,
+                                 "--obj-type", kind)
+
+            parent = wiki["node_token"]
+            folder = self.ensure(
+                "wiki_project", lambda: wiki_match(lark, wiki, parent, folder_name, "docx"),
+                lambda: create_node(parent, folder_name, "docx"), ("node_token",),
+            )
+            base = self.ensure(
+                "base", lambda: wiki_match(lark, wiki, folder, base_name, "bitable"),
+                lambda: create_node(folder, base_name, "bitable"), ("obj_token",),
+            )
+        else:
+            folder = self.ensure(
+                "folder", lambda: matching(lark.files(), folder_name, "folder"),
+                lambda: lark.call("drive", "+create-folder", "--name", folder_name),
+                ("folder_token", "token"),
+            )
+            base = self.ensure(
+                "base", lambda: matching(lark.files(folder), base_name, "bitable"),
+                lambda: lark.call("base", "+base-create", "--name", base_name,
+                                  "--folder-token", folder, "--time-zone", self.state["timezone"],
+                                  "--table-name", first["name"], "--fields",
+                                  json.dumps(first["fields"], ensure_ascii=False)).get("base"),
+                ("base_token", "app_token", "token"),
+            )
         for key, table in tables.items():
             lookup = lambda: matching(
                 lark.base_rows("+table-list", "tables", "--base-token", base), table["name"]
             )
             resource = f"table.{key}"
-            if key == first_key and resource not in self.state["resources"]:
+            if not wiki and key == first_key and resource not in self.state["resources"]:
                 if not self.apply or self.state.get("pending") == resource:
                     raise SetupError("Showcase 状态未登记。")
                 row = lookup()
@@ -324,17 +392,19 @@ class Provision:
         names = {row.get("name", row.get("table_name")) for row in
                  lark.base_rows("+table-list", "tables", "--base-token", base)}
         expected_names = {table["name"] for table in tables.values()}
-        if not expected_names <= names or (not self.state.get("ready") and names != expected_names):
+        if not expected_names <= names or (not wiki and not self.state.get("ready")
+                                          and names != expected_names):
             raise SetupError("Base 回读表结构不符，请核查是否有多余的初始默认表。")
 
         for key, doc in schema["documents"].items():
             title = doc["title"]
             doc_id = self.ensure(
-                f"doc.{key}", lambda: matching(lark.files(folder), title, "docx"),
+                f"doc.{key}", lambda: (wiki_match(lark, wiki, folder, title, "docx") if wiki
+                                      else matching(lark.files(folder), title, "docx")),
                 lambda: lark.call("docs", "+create", "--title", title,
                                   "--parent-token", folder, "--doc-format", "markdown",
                                   "--content", "-", content=contents[key]).get("document"),
-                ("document_id", "token"),
+                ("document_id", "obj_token", "token"),
             )
             result = lark.call("docs", "+fetch", "--doc", doc_id, "--doc-format", "markdown")
             document = result.get("document")
@@ -387,20 +457,37 @@ def run_lark(lark, args, state):
     if lark.identity(binding["app_id"], binding["brand"], binding["tenant_key"]) != binding:
         raise SetupError("当前飞书授权人与配置时不同。")
     resources = state["resources"]
-    folder = resources["folder"]["id"]
+    wiki = state.get("wiki")
+    if wiki:
+        folder = resources["wiki_project"]["id"]
+        if not any(row.get("node_token") == folder and row.get("node_type") == "origin"
+                   for row in lark.wiki_rows(wiki, wiki["node_token"])):
+            raise SetupError("项目页已不在绑定的 Wiki 位置。")
+    else:
+        folder = resources["folder"]["id"]
     if command[0:1] == ("base",) and len(command) == 2 and command[1] in BASE_COMMANDS:
         table_ids = {value["id"] for key, value in resources.items() if key.startswith("table.")}
         if (flag(args, "--base-token") != resources["base"]["id"] or
                 flag(args, "--table-id") not in table_ids):
             raise SetupError("Base 或数据表超出当前项目。")
+        if wiki and not any(row.get("obj_token") == resources["base"]["id"] and
+                            row.get("node_token") == resources["base"]["node_token"] and
+                            row.get("node_type") == "origin"
+                            for row in lark.wiki_rows(wiki, folder)):
+            raise SetupError("Base 已不在绑定的 Wiki 项目页下。")
     elif command == ("docs", "+create"):
         forbid_flags(args, "--parent-position")
         if flag(args, "--parent-token") != folder:
             raise SetupError("文档目标目录超出当前项目。")
     elif command in {("docs", "+fetch"), ("docs", "+update")}:
         doc_id = flag(args, "--doc")
-        if not any(row.get("type") == "docx" and row.get("token") == doc_id
-                   for row in lark.files(folder)):
+        if wiki:
+            allowed = any(row.get("obj_type") == "docx" and row.get("node_type") == "origin"
+                          and row.get("obj_token") == doc_id for row in lark.wiki_rows(wiki, folder))
+        else:
+            allowed = any(row.get("type") == "docx" and row.get("token") == doc_id
+                          for row in lark.files(folder))
+        if not allowed:
             raise SetupError("文档不属于当前项目目录。请传入文档 ID。")
         if command == ("docs", "+update"):
             if flag(args, "--command") not in {"append", "str_replace", "block_insert_after"}:
@@ -419,6 +506,9 @@ def parse_args():
     parser.add_argument("--brand", choices=("feishu", "lark"), default="feishu")
     parser.add_argument("--app-id", help="dedicated app ID")
     parser.add_argument("--tenant-key", help="independently confirmed target tenant key")
+    destination = parser.add_mutually_exclusive_group()
+    destination.add_argument("--wiki-parent", help="authorized Wiki page URL or node ID")
+    destination.add_argument("--drive", action="store_true", help="explicitly use a Drive folder")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true", help="create missing Feishu resources")
     mode.add_argument("--verify", action="store_true", help="verify saved resources without remote writes")
@@ -455,7 +545,9 @@ def main(args, root=ROOT):
         print(json.dumps({
             "mode": "offline-plan", "project": args.project, "display_name": display,
             "profile": lark.profile, "config_directory": ".project/lark-cli",
-            "state": ".project/feishu.json", "timezone": args.timezone or "Asia/Shanghai",
+            "state": ".project/feishu.json",
+            "timezone": (args.timezone or "Asia/Shanghai") if args.drive else None,
+            "destination": "drive" if args.drive else "wiki",
             "schema": schema, "brief_supplied": bool(args.brief),
         }, ensure_ascii=False, indent=2))
         return 0
@@ -484,6 +576,21 @@ def main(args, root=ROOT):
         if state is not None and binding != state["binding"]:
             raise SetupError("飞书授权与已保存的项目绑定不同。")
 
+        requested_wiki = wiki_token(args.wiki_parent) if args.wiki_parent else None
+        wiki = state.get("wiki") if state else None
+        if state:
+            if ((requested_wiki and (not wiki or requested_wiki != wiki["node_token"]))
+                    or (wiki and args.drive)):
+                raise SetupError("目标 Wiki 与已绑定的项目位置不同。")
+            if wiki and wiki_target(lark, wiki["node_token"]) != wiki:
+                raise SetupError("目标 Wiki 已变化。请核对后继续。")
+        elif requested_wiki:
+            wiki = wiki_target(lark, requested_wiki)
+        elif not args.drive:
+            raise SetupError("请先确认目标 Wiki，再用 --wiki-parent 提供它的页面链接或节点 ID。")
+        if wiki and args.timezone:
+            raise SetupError("Wiki 原生 Base 使用飞书默认时区；--timezone 仅用于云盘模式。")
+
         contents = {}
         if args.apply:
             brief = args.brief or directory / "brief.md"
@@ -503,6 +610,8 @@ def main(args, root=ROOT):
                      "schema_version": schema["version"], "timezone": args.timezone or "Asia/Shanghai",
                      "folder_name": f"{display} · 内容获客 · {secrets.token_hex(4)}",
                      "binding": binding, "resources": {}, "ready": False}
+            if wiki:
+                state["wiki"] = wiki
             write_state(state_path, state)
         Provision(lark, state_path, state, args.apply, args.retry_pending).run(schema, contents)
         print(json.dumps({

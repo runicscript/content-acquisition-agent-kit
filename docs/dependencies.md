@@ -1,6 +1,6 @@
 # 依赖清单与验证方法
 
-以新项目实际选用的能力为准。初始化需要 Git、Python 3.10+、可写工作区和命令执行权限。飞书模式还需要官方 CLI 和新租户授权。每个平台各选一条公开数据检索路径，图文和视频按委托选择生产工具。旧项目的凭据、余额、用户身份和连接器授权均需在新环境独立核验。
+以新项目实际选用的能力为准。初始化需要 Git、Python 3.10+、可写工作区和命令执行权限。飞书模式还需要官方 CLI 和新租户授权。每个平台各选一条公开数据检索路径，启动时默认接入 LibTV MCP，负责人明确只做图文时可跳过视频授权。旧项目的凭据、余额、用户身份和连接器授权均需在新环境独立核验。
 
 ## WorkBuddy 原版依赖
 
@@ -38,7 +38,7 @@
 ## 检索能力安装和验收
 
 1. 选择本轮覆盖的平台及其数据路径。结构化检索可选 GUAIKEI，红狐提供替代的作品搜索、账号搜索及详情能力。若账号尚未授权，可用公开网页、平台公开入口或负责人给出的链接开始。用可访问的原帖核验，按实际覆盖记录可见互动、评论及证据缺口，无法访问记为未知。
-2. 使用 GUAIKEI 时，准备 Node.js 16.14.0 或以上。用上表的 GitHub 源将两个仓库分别检出到模板仓库之外的依赖目录，也可使用 WorkBuddy 官方技能市场。核对根目录 `SKILL.md`、`package.json`、下表脚本和实际提交。供应商声明两套工具使用同一个环境变量，通过 [GUAIKEI 官网](https://www.guaikei.com/) 开通并由负责人为当前项目授权。先执行 `node --version` 和 `node --check <入口脚本>` 检查本地运行环境。密钥存在性只报告有或无。
+2. 使用 GUAIKEI 时，准备 Node.js 16.14.0 或以上。用上表的 GitHub 源将两个仓库分别检出到模板仓库之外的依赖目录，也可使用 WorkBuddy 官方技能市场。核对根目录 `SKILL.md`、`package.json`、下表脚本和实际提交。供应商声明两套工具使用同一个环境变量，通过 [GUAIKEI 官网](https://www.guaikei.com/) 开通并由负责人为当前项目授权。先执行 `node --version` 和 `node --check <入口脚本>` 检查本地运行环境。选了抖音或小红书时，Agent 主动请负责人通过安全凭据入口配置这把 Key，等待授权后核验。密钥存在性只报告有或无。
 3. 从对应供应商仓库根目录按下表运行。下列真实查询可能消耗额度，先核对当前项目预算和授权。从一条公开搜索、少量结果开始，再按需抽查一个作品链接或公开评论。判断业务结果时检查返回 JSON 的 `status`、`error_code`、`results` 和来源可访问性。空结果与请求失败分别登记。遇鉴权错误先修正授权，避免重复请求。上游工具可能在自己的目录生成日志，保留在项目私有工作区或依赖目录。
 
 | 平台 | 最小关键词查询示例 | 按需核验 |
@@ -50,8 +50,15 @@
 
 ## 图文和视频能力
 
+在 Codex 接入 LibTV 时，可运行供应商提供的两条安装命令，然后重新加载插件，在 MCP 连接管理中请负责人完成 OAuth。其他 Agent 用各自的 MCP 管理入口。 [LibTV 官方安装说明](https://github.com/liblib-ai/marketplace#安装)
+
+```sh
+codex plugin marketplace add https://github.com/liblib-ai/marketplace.git --ref main
+codex plugin add libtv@libtv
+```
+
 - **图文**默认交付逐页制作包。能生成图像时用 Agent 原生生图或负责人已选的工具。可把同一制作包交给 Codex 的图像能力。选择直接调用 OpenAI API 时，单独配置 `OPENAI_API_KEY` 并核对额度授权。是否交付实图以实际输出为准。参见 [Codex 图像能力](https://openai.com/index/introducing-the-codex-app/) 和 [OpenAI 图像 API](https://developers.openai.com/learn/imagegen)。
-- **LibTV HTTP MCP**使用 `https://mcp.liblib.tv/mcp`。WorkBuddy 在官方连接器市场接入，Codex 按供应商说明安装 `libtv@libtv`，支持 HTTP MCP 和 OAuth 的其他 Agent 在自身连接管理中填地址，由用户登录。接通后读取服务返回的 instructions 和 tools list。如工具清单提供 `doctor`，先用它或同等只读能力核验身份、可见项目和工具权限。逐项检查当前账号可否上传、生成、合成、导出。登录成功只证明连接，获授权的短样片完成并回放后才能报告成片链路已实测。[LibTV 官方插件](https://github.com/liblib-ai/marketplace)
+- **LibTV HTTP MCP**使用 `https://mcp.liblib.tv/mcp`。WorkBuddy 在官方连接器市场接入，Codex 按供应商说明安装 `libtv@libtv`，支持 HTTP MCP 和 OAuth 的其他 Agent 在自身连接管理中填地址，由用户登录。初始化时主动发起连接和登录请求，收到用户确认后再核验，生产或扣费另按项目授权。接通后读取服务返回的 instructions 和 tools list。如工具清单提供 `doctor`，先用它或同等只读能力核验身份、可见项目和工具权限。逐项检查当前账号可否上传、生成、合成、导出。登录成功只证明连接，获授权的短样片完成并回放后才能报告成片链路已实测。[LibTV 官方插件](https://github.com/liblib-ai/marketplace)
 - **LibTV CLI 备选**适用于没有 OAuth MCP 客户端的执行环境。供应商 [libtv-labs/libtv-skills](https://github.com/libtv-labs/libtv-skills) 的 `libtv-skill` 通过 `LIBTV_ACCESS_KEY` 提供素材上传、生成会话、进度查询与下载。先验证项目归属和当前账号配额。独立检查合成、时间轴和导出是否满足本项目验收。仅能生成片段时，按授权使用其他合成工具，或者交分镜、提示词、素材清单和待办。
 
 凭据通过执行环境的凭据入口注入，飞书应用配置与 LibTV OAuth 按各自官方流程完成。只将依赖版本、能力、实测状态和非敏感故障摘要写入 `.project/readiness.md`。待审成品、平台发布、对外消息及定时任务分别按本项目授权处理。
